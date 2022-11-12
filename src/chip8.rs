@@ -8,6 +8,7 @@ use std::io::{BufReader, Read};
 
 mod memory;
 mod display;
+mod instruction;
 
 /// This is the structure of the chip-8 interpreter
 #[derive(Debug)]
@@ -85,7 +86,7 @@ impl Chip8 {
     /// - NNN: The second, third and fourth nibbles. A 12-bit immediate memory address.
     fn decode(&self, opcode: u16) {
         let instruction_type = (opcode >> 12) as u8;
-        println!("{:#01X?}", instruction_type);
+        // println!("{:#01X?}", instruction_type);
         match instruction_type {
             0x0 | 0x2 => {
                 println!("Subroutine");
