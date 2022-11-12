@@ -14,4 +14,8 @@ impl Memory {
         let end = data.len();
         self.data[offset..offset + end].copy_from_slice(&data);
     }
+
+    pub fn read(&self, offset: usize) -> u8 {
+        self.data[offset]
+    }
 }

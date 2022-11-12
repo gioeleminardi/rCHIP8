@@ -6,4 +6,13 @@ fn main() {
     chip8.load_rom("rom/IBMLogo.ch8").expect("Error reading rom");
 
     println!("{:#02X?}", chip8);
+
+    chip8.run();
+    chip8.run();
+    chip8.run();
+    chip8.run();
+    chip8.run();
+    chip8.run();
+    chip8.run();
+    chip8.run();
 }
