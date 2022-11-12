@@ -3,6 +3,7 @@ use std::io;
 use std::io::{BufReader, Read};
 
 mod memory;
+mod display;
 
 #[derive(Debug)]
 pub struct Chip8 {
@@ -10,6 +11,7 @@ pub struct Chip8 {
     stack: Vec<u16>,
     pc: u16,
     regs: Vec<u8>,
+    display: display::Display,
 }
 
 impl Chip8 {
@@ -22,6 +24,7 @@ impl Chip8 {
             stack: Vec::new(),
             pc: 0x200,
             regs,
+            display: display::Display {},
         }
     }
 
