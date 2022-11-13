@@ -76,20 +76,23 @@ impl Chip8 {
         opcode
     }
 
-    /// nnn or addr - A 12-bit value, the lowest 12 bits of the instruction
-    /// n or nibble - A 4-bit value, the lowest 4 bits of the instruction
-    /// x - A 4-bit value, the lower 4 bits of the high byte of the instruction
-    /// y - A 4-bit value, the upper 4 bits of the low byte of the instruction
-    /// kk or byte - An 8-bit value, the lowest 8 bits of the instruction
-    fn decode(&self, opcode: u16) {
+    /// CHIP-8 instructions are divided into broad categories by the first “nibble”,
+    /// or “half-byte”, which is the first hexadecimal number.
+    /// Although every instruction will have a first nibble that tells you what kind of instruction
+    /// it is, the rest of the nibbles will have different meanings.
+    /// To differentiate these meanings, we usually call them different things,
+    /// but all of them can be any hexadecimal number from 0 to F
+    fn decode(&mut self, opcode: u16) {
         let instruction_type = (opcode >> 12) as u8;
         let instruction_data = opcode & 0b111111111111;
 
-        let (nnn, n, x, y, kk) = self.extract_instruction_data(instruction_data);
+        let (nnn, n, x, y, kk) = Self::extract_instruction_data(instruction_data);
+        let x = x as usize;
+        let y = y as usize;
+
 
         match instruction_type {
             0x0 => {
-                // SYS addr | CLS | RET
                 match instruction_data {
                     0x0EE => {
                         // 00EE - RET
@@ -98,6 +101,8 @@ impl Chip8 {
                         // The interpreter sets the program counter to the address
                         // at the top of the stack, then subtracts 1 from the stack pointer.
                         println!("RET");
+                        let addr = self.stack.pop().unwrap();
+                        self.pc = addr;
                     }
                     0x0E0 => {
                         // 00E0 - CLS
@@ -120,6 +125,7 @@ impl Chip8 {
                 //
                 // The interpreter sets the program counter to nnn.
                 println!("JP @ {instruction_data}");
+                self.pc = nnn;
             }
             0x2 => {
                 // 2nnn - CALL addr
@@ -129,6 +135,8 @@ impl Chip8 {
                 // then puts the current PC on the top of the stack.
                 // The PC is then set to nnn.
                 println!("CALL @ {instruction_data}");
+                self.stack.push(self.pc);
+                self.pc = nnn;
             }
             0x3 => {
                 // 3xkk - SE Vx, byte
@@ -137,7 +145,9 @@ impl Chip8 {
                 // The interpreter compares register Vx to kk, and if they are equal,
                 // increments the program counter by 2.
                 println!("SE");
-                todo!();
+                if self.regs[x] == kk {
+                    self.pc += 2;
+                }
             }
             0x4 => {
                 // 4xkk - SNE Vx, byte
@@ -146,6 +156,9 @@ impl Chip8 {
                 // The interpreter compares register Vx to kk, and if they are not equal,
                 // increments the program counter by 2.
                 println!("SNE");
+                if self.regs[x] != kk {
+                    self.pc += 2;
+                }
             }
             0x5 => {
                 // 5xy0 - SE Vx, Vy
@@ -154,6 +167,9 @@ impl Chip8 {
                 // The interpreter compares register Vx to register Vy, and if they are equal,
                 // increments the program counter by 2.
                 println!("SE 2");
+                if self.regs[x] == self.regs[y] {
+                    self.pc += 2;
+                }
             }
             0x6 => {
                 // 6xkk - LD Vx, byte
@@ -161,6 +177,7 @@ impl Chip8 {
                 //
                 // The interpreter puts the value kk into register Vx.
                 println!("LD");
+                self.regs[x] = kk;
             }
             0x7 => {
                 // 7xkk - ADD Vx, byte
@@ -168,74 +185,105 @@ impl Chip8 {
                 //
                 // Adds the value kk to the value of register Vx, then stores the result in Vx.
                 println!("ADD");
+                self.regs[x] += kk;
             }
             0x8 => {
-                // 8xy0 - LD Vx, Vy
-                // Set Vx = Vy.
-                //
-                // Stores the value of register Vy in register Vx.
-                //
-                // 8xy1 - OR Vx, Vy
-                // Set Vx = Vx OR Vy.
-                //
-                // Performs a bitwise OR on the values of Vx and Vy, then stores the result in Vx.
-                // A bitwise OR compares the corresponding bits from two values,
-                // and if either bit is 1, then the same bit in the result is also 1.
-                // Otherwise, it is 0.
-                //
-                // 8xy2 - AND Vx, Vy
-                // Set Vx = Vx AND Vy.
-                //
-                // Performs a bitwise AND on the values of Vx and Vy, then stores the result in Vx.
-                // A bitwise AND compares the corresponding bits from two values,
-                // and if both bits are 1, then the same bit in the result is also 1.
-                // Otherwise, it is 0.
-                //
-                //
-                // 8xy3 - XOR Vx, Vy
-                // Set Vx = Vx XOR Vy.
-                //
-                // Performs a bitwise exclusive OR on the values of Vx and Vy,
-                // then stores the result in Vx. An exclusive OR compares the corresponding bits
-                // from two values, and if the bits are not both the same, then the corresponding
-                // bit in the result is set to 1. Otherwise, it is 0.
-                //
-                //
-                // 8xy4 - ADD Vx, Vy
-                // Set Vx = Vx + Vy, set VF = carry.
-                //
-                // The values of Vx and Vy are added together. If the result is greater than
-                // 8 bits (i.e., > 255,) VF is set to 1, otherwise 0. Only the lowest 8 bits of
-                // the result are kept, and stored in Vx.
-                //
-                //
-                // 8xy5 - SUB Vx, Vy
-                // Set Vx = Vx - Vy, set VF = NOT borrow.
-                //
-                // If Vx > Vy, then VF is set to 1, otherwise 0. Then Vy is subtracted from Vx,
-                // and the results stored in Vx.
-                //
-                //
-                // 8xy6 - SHR Vx {, Vy}
-                // Set Vx = Vx SHR 1.
-                //
-                // If the least-significant bit of Vx is 1, then VF is set to 1, otherwise 0.
-                // Then Vx is divided by 2.
-                //
-                //
-                // 8xy7 - SUBN Vx, Vy
-                // Set Vx = Vy - Vx, set VF = NOT borrow.
-                //
-                // If Vy > Vx, then VF is set to 1, otherwise 0. Then Vx is subtracted from Vy,
-                // and the results stored in Vx.
-                //
-                //
-                // 8xyE - SHL Vx {, Vy}
-                // Set Vx = Vx SHL 1.
-                //
-                // If the most-significant bit of Vx is 1, then VF is set to 1, otherwise to 0.
-                // Then Vx is multiplied by 2.
-                println!("Logical");
+                match n {
+                    0x0 => {
+                        // 8xy0 - LD Vx, Vy
+                        // Set Vx = Vy.
+                        //
+                        // Stores the value of register Vy in register Vx.
+                        self.regs[x] = self.regs[y];
+                    }
+                    0x1 => {
+                        // 8xy1 - OR Vx, Vy
+                        // Set Vx = Vx OR Vy.
+                        //
+                        // Performs a bitwise OR on the values of Vx and Vy, then stores the result in Vx.
+                        // A bitwise OR compares the corresponding bits from two values,
+                        // and if either bit is 1, then the same bit in the result is also 1.
+                        // Otherwise, it is 0.
+                        self.regs[x] |= self.regs[y];
+                    }
+                    0x2 => {
+                        // 8xy2 - AND Vx, Vy
+                        // Set Vx = Vx AND Vy.
+                        //
+                        // Performs a bitwise AND on the values of Vx and Vy, then stores the result in Vx.
+                        // A bitwise AND compares the corresponding bits from two values,
+                        // and if both bits are 1, then the same bit in the result is also 1.
+                        // Otherwise, it is 0.
+                        self.regs[x] &= self.regs[y];
+                    }
+                    0x3 => {
+                        // 8xy3 - XOR Vx, Vy
+                        // Set Vx = Vx XOR Vy.
+                        //
+                        // Performs a bitwise exclusive OR on the values of Vx and Vy,
+                        // then stores the result in Vx. An exclusive OR compares the corresponding bits
+                        // from two values, and if the bits are not both the same, then the corresponding
+                        // bit in the result is set to 1. Otherwise, it is 0.
+                        self.regs[x] ^= self.regs[y];
+                    }
+                    0x4 => {
+                        // 8xy4 - ADD Vx, Vy
+                        // Set Vx = Vx + Vy, set VF = carry.
+                        //
+                        // The values of Vx and Vy are added together. If the result is greater than
+                        // 8 bits (i.e., > 255,) VF is set to 1, otherwise 0. Only the lowest 8 bits of
+                        // the result are kept, and stored in Vx.
+                        let temp: u16 = self.regs[x] as u16 + self.regs[y] as u16;
+
+                        self.regs[x] += self.regs[y];
+
+                        if temp > 0xFF {
+                            self.regs[0xF] = 1;
+                        }
+                    }
+                    0x5 => {
+                        // 8xy5 - SUB Vx, Vy
+                        // Set Vx = Vx - Vy, set VF = NOT borrow.
+                        //
+                        // If Vx > Vy, then VF is set to 1, otherwise 0. Then Vy is subtracted from Vx,
+                        // and the results stored in Vx.
+                        let reg_x = self.regs[x];
+
+                        self.regs[x] -= self.regs[y];
+
+                        if reg_x > self.regs[y] {
+                            self.regs[0xF] = 1;
+                        }
+                    }
+                    0x6 => {
+                        // 8xy6 - SHR Vx {, Vy}
+                        // Set Vx = Vx SHR 1.
+                        //
+                        // If the least-significant bit of Vx is 1, then VF is set to 1, otherwise 0.
+                        // Then Vx is divided by 2.
+
+                        todo!();
+
+                    }
+                    0x7 => {
+                        // 8xy7 - SUBN Vx, Vy
+                        // Set Vx = Vy - Vx, set VF = NOT borrow.
+                        //
+                        // If Vy > Vx, then VF is set to 1, otherwise 0. Then Vx is subtracted from Vy,
+                        // and the results stored in Vx.
+
+                        todo!();
+                    }
+                    0xE => {
+                        // 8xyE - SHL Vx {, Vy}
+                        // Set Vx = Vx SHL 1.
+                        //
+                        // If the most-significant bit of Vx is 1, then VF is set to 1, otherwise to 0.
+                        // Then Vx is multiplied by 2.
+                        todo!();
+                    }
+                    _ => panic!("Not valid!")
+                }
             }
             0x9 => {
                 // 9xy0 - SNE Vx, Vy
@@ -243,21 +291,21 @@ impl Chip8 {
                 //
                 // The values of Vx and Vy are compared, and if they are not equal,
                 // the program counter is increased by 2.
-                println!("SNE 2");
+                todo!();
             }
             0xA => {
                 // Annn - LD I, addr
                 // Set I = nnn.
                 //
                 // The value of register I is set to nnn.
-                println!("LD 2");
+                todo!();
             }
             0xB => {
                 // Bnnn - JP V0, addr
                 // Jump to location nnn + V0.
                 //
                 // The program counter is set to nnn plus the value of V0.
-                println!("JP 2");
+                todo!();
             }
             0xC => {
                 // Cxkk - RND Vx, byte
@@ -266,7 +314,7 @@ impl Chip8 {
                 // The interpreter generates a random number from 0 to 255,
                 // which is then ANDed with the value kk. The results are stored in Vx.
                 // See instruction 8xy2 for more information on AND.
-                println!("RND");
+                todo!();
             }
             0xD => {
                 // Dxyn - DRW Vx, Vy, nibble
@@ -279,7 +327,7 @@ impl Chip8 {
                 // so part of it is outside the coordinates of the display, it wraps around to the
                 // opposite side of the screen. See instruction 8xy3 for more information on XOR,
                 // and section 2.4, Display, for more information on the Chip-8 screen and sprites.
-                println!("DRW");
+                todo!();
             }
             0xE => {
                 // Ex9E - SKP Vx
@@ -294,7 +342,7 @@ impl Chip8 {
                 //
                 // Checks the keyboard, and if the key corresponding to the value of Vx is
                 // currently in the up position, PC is increased by 2.
-                println!("SKP");
+                todo!();
             }
             0xF => {
                 // Fx07 - LD Vx, DT
@@ -356,13 +404,18 @@ impl Chip8 {
                 //
                 // The interpreter reads values from memory starting at location I into
                 // registers V0 through Vx.
-                println!("Misc");
+                todo!();
             }
             _ => panic!("opcode not valid!"),
         }
     }
 
-    fn extract_instruction_data(&self, data: u16) -> (u16, u8, u8, u8, u8) {
+    /// nnn or addr - A 12-bit value, the lowest 12 bits of the instruction
+    /// n or nibble - A 4-bit value, the lowest 4 bits of the instruction
+    /// x - A 4-bit value, the lower 4 bits of the high byte of the instruction
+    /// y - A 4-bit value, the upper 4 bits of the low byte of the instruction
+    /// kk or byte - An 8-bit value, the lowest 8 bits of the instruction
+    fn extract_instruction_data(data: u16) -> (u16, u8, u8, u8, u8) {
         let nnn = data;
         let n = (data & 0b1111) as u8;
         let x = (data >> 8) as u8;
