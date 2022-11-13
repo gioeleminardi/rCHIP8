@@ -76,20 +76,17 @@ impl Chip8 {
         opcode
     }
 
-    /// Although every instruction will have a first nibble that tells you what kind of
-    /// instruction it is, the rest of the nibbles will have different meanings.
-    /// To differentiate these meanings, we usually call them different things,
-    /// but all of them can be any hexadecimal number from 0 to F:
-    ///
-    /// - X: The second nibble. Used to look up one of the 16 registers (VX) from V0 through VF.
-    /// - Y: The third nibble. Also used to look up one of the 16 registers (VY) from V0 through VF.
-    /// - N: The fourth nibble. A 4-bit number.
-    /// - NN: The second byte (third and fourth nibbles). An 8-bit immediate number.
-    /// - NNN: The second, third and fourth nibbles. A 12-bit immediate memory address.
+    /// nnn or addr - A 12-bit value, the lowest 12 bits of the instruction
+    /// n or nibble - A 4-bit value, the lowest 4 bits of the instruction
+    /// x - A 4-bit value, the lower 4 bits of the high byte of the instruction
+    /// y - A 4-bit value, the upper 4 bits of the low byte of the instruction
+    /// kk or byte - An 8-bit value, the lowest 8 bits of the instruction
     fn decode(&self, opcode: u16) {
         let instruction_type = (opcode >> 12) as u8;
         let instruction_data = opcode & 0b111111111111;
-        // println!("{:#01X?}", instruction_type);
+
+        let (nnn, n, x, y, kk) = self.extract_instruction_data(instruction_data);
+
         match instruction_type {
             0x0 => {
                 // SYS addr | CLS | RET
@@ -361,7 +358,16 @@ impl Chip8 {
                 // registers V0 through Vx.
                 println!("Misc");
             }
-            _ => todo!(),
+            _ => panic!("opcode not valid!"),
         }
+    }
+
+    fn extract_instruction_data(&self, data: u16) -> (u16, u8, u8, u8, u8) {
+        let nnn = data;
+        let n = (data & 0b1111) as u8;
+        let x = (data >> 8) as u8;
+        let y = ((data >> 4) & 0b1111) as u8;
+        let kk = (data & 0xFF) as u8;
+        (nnn, n, x, y, kk)
     }
 }
