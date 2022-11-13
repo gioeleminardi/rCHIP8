@@ -18,4 +18,8 @@ impl Memory {
     pub fn read(&self, offset: usize) -> u8 {
         self.data[offset]
     }
+
+    pub fn read_chunk(&self, offset: usize, n: usize) -> &[u8] {
+        &self.data[offset..offset + n]
+    }
 }
