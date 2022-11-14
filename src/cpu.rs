@@ -4,7 +4,7 @@
 
 use rand::Rng;
 use std::fs::File;
-use std::io;
+use std::{io, thread};
 use std::io::{BufReader, Read};
 
 mod memory;
@@ -101,6 +101,14 @@ impl Cpu {
         let opcode = self.fetch();
         // Decode & Execute
         self.decode_and_execute(opcode);
+
+        if self.dt > 0 {
+            self.dt -= 1;
+        }
+
+        if self.st > 0 {
+            self.st -= 1;
+        }
     }
 
     /// Set 1 to `keys[key]` if the key `key` is pressed

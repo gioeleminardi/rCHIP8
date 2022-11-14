@@ -104,8 +104,6 @@ fn main() {
         }
         // }
 
-        // break 'running;
-
         canvas.present();
         ::std::thread::sleep(Duration::from_micros(1000000 / CLOCK as u64));
     }
