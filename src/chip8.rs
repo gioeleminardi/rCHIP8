@@ -2,41 +2,80 @@
 //!
 //! `r_chip_8` is an interpreter for CHIP-8 programming language.
 
+use rand::Rng;
 use std::fs::File;
 use std::io;
 use std::io::{BufReader, Read};
-use rand::Rng;
 
-mod memory;
 mod display;
+mod memory;
 
 const START_SECTION: u16 = 0x200;
 const FONT_SECTION: u16 = 0x50;
+const WIDTH: usize = 64;
+const HEIGHT: usize = 32;
+const VRAM_SIZE: usize = WIDTH * HEIGHT;
+
+const FONTS: [u8; 5 * 16] = [
+    0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+    0x20, 0x60, 0x20, 0x20, 0x70, // 1
+    0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+    0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+    0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+    0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+    0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+    0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+    0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+    0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+    0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+    0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+    0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+    0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+    0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+    0xF0, 0x80, 0xF0, 0x80, 0x80  // F
+];
 
 /// This is the structure of the chip-8 interpreter
 #[derive(Debug)]
 pub struct Chip8 {
     memory: memory::Memory,
     stack: Vec<u16>,
-    display: display::Display,
+    vram: Vec<u8>,
     regs: Vec<u8>,
+    keys: Vec<u8>,
     pc: u16,
     i: u16,
+    dt: u8,
+    st: u8,
 }
 
 impl Chip8 {
     /// Construct a new instance of Chip8
     pub fn new() -> Chip8 {
+        let mut memory = memory::Memory::new();
+        memory.load_at_offset(FONT_SECTION as usize, FONTS.to_vec());
+
         let mut regs = Vec::new();
         regs.resize(16, 0);
 
+        let mut vram = Vec::new();
+        vram.resize(VRAM_SIZE, 0);
+
+        let mut keys = Vec::new();
+        keys.resize(16, 0);
+
+        let stack = Vec::new();
+
         Chip8 {
-            memory: memory::Memory::new(),
-            stack: Vec::new(),
-            display: display::Display {},
+            memory,
+            stack,
+            vram,
             regs,
+            keys,
             pc: START_SECTION,
             i: 0,
+            dt: 0,
+            st: 0,
         }
     }
 
@@ -91,7 +130,6 @@ impl Chip8 {
         let (nnn, n, x, y, kk) = Self::extract_instruction_data(instruction_data);
         let x = x as usize;
         let y = y as usize;
-
 
         match instruction_type {
             0x0 => {
@@ -296,7 +334,7 @@ impl Chip8 {
                         self.regs[x] <<= 1;
                         println!("SHL V{:1X}", x);
                     }
-                    _ => panic!("Not valid!")
+                    _ => panic!("Not valid!"),
                 }
             }
             0x9 => {
@@ -433,7 +471,8 @@ impl Chip8 {
                         let tens: u8 = vx / 10;
                         vx -= tens * 10;
                         let ones: u8 = vx;
-                        self.memory.load_at_offset(self.i as usize, vec![hundreds, tens, ones]);
+                        self.memory
+                            .load_at_offset(self.i as usize, vec![hundreds, tens, ones]);
                         println!("LD B, V{:1X}", x);
                     }
                     0x55 => {
@@ -463,7 +502,7 @@ impl Chip8 {
                         self.regs = regs;
                         println!("LD V{:1X}, [I]", x);
                     }
-                    _ => panic!("Error on OPCODE!")
+                    _ => panic!("Error on OPCODE!"),
                 }
             }
             _ => panic!("opcode not valid!"),
@@ -482,5 +521,15 @@ impl Chip8 {
         let y = ((data >> 4) & 0b1111) as u8;
         let kk = (data & 0xFF) as u8;
         (nnn, n, x, y, kk)
+    }
+
+    pub fn key_press(&mut self, key: u8) {
+        self.keys[key as usize] = 1;
+        println!("Key Pressed: {}", key);
+    }
+
+    pub fn key_release(&mut self, key: u8) {
+        self.keys[key as usize] = 0;
+        println!("Key Released: {}", key);
     }
 }
