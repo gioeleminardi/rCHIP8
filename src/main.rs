@@ -1,25 +1,24 @@
 mod cpu;
 
+// use rodio::source::{SineWave, Source};
+// use rodio::{Decoder, OutputStream, Sink};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
-use std::time::Duration;
 use sdl2::rect::Rect;
+use std::time::Duration;
 
 const WIDTH: u32 = 640;
 const HEIGHT: u32 = 320;
 const SCALE_X: u32 = WIDTH / 64;
 const SCALE_Y: u32 = HEIGHT / 32;
-const CLOCK: u32 = 60; // Hz
+const CLOCK: u32 = 1_000_000; // Hz
 
 fn main() {
     let mut cpu = cpu::Cpu::new();
 
-    // cpu.load_rom("rom/IBMLogo.ch8").expect("Error reading rom");
-    // cpu.load_rom("rom/test_opcode.ch8").expect("Error reading rom");
-    cpu.load_rom("rom/c8games/INVADERS").expect("Error reading rom");
-
-    // println!("{:#02X?}", cpu);
+    cpu.load_rom("rom/test_opcode.ch8")
+        .expect("Error reading rom");
 
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
@@ -31,6 +30,11 @@ fn main() {
 
     let mut canvas = window.into_canvas().build().unwrap();
     let mut event_pump = sdl_context.event_pump().unwrap();
+
+    // let mut speaker = adi::speaker
+
+    cpu.start_timers();
+
     'running: loop {
         canvas.set_draw_color(Color::RGB(0, 0, 0));
         canvas.clear();
@@ -93,18 +97,41 @@ fn main() {
 
         canvas.set_draw_color(Color::GREEN);
 
-        // if cpu.draw() {
-        for row in 0..32 {
-            for col in 0..64 {
-                if cpu.vram(col as usize, row as usize) != 0 {
-                    let rect = Rect::new((col * SCALE_X) as i32, (row * SCALE_Y) as i32, SCALE_X, SCALE_Y);
-                    canvas.fill_rect(rect).unwrap();
+        if cpu.draw() {
+            for row in 0..32 {
+                for col in 0..64 {
+                    if cpu.vram(col as usize, row as usize) != 0 {
+                        let rect = Rect::new(
+                            (col * SCALE_X) as i32,
+                            (row * SCALE_Y) as i32,
+                            SCALE_X,
+                            SCALE_Y,
+                        );
+                        canvas.fill_rect(rect).unwrap();
+                    }
                 }
             }
         }
-        // }
+
+        if cpu.play() {
+            // music.play(1).unwrap();
+            println!("BEEP BOP");
+            // let (_stream, stream_handle) = OutputStream::try_default().unwrap();
+            // let sink = rodio::Sink::try_new(&stream_handle).unwrap();
+            //
+            // // Add a dummy source of the sake of the example.
+            // let source = SineWave::new(440.0)
+            //     .take_duration(Duration::from_secs_f32(0.2))
+            //     .amplify(0.20);
+            // sink.append(source);
+            //
+            // // The sound plays in a separate thread. This call will block the current thread until the sink
+            // // has finished playing all its queued sounds.
+            // sink.sleep_until_end();
+
+        }
 
         canvas.present();
-        ::std::thread::sleep(Duration::from_micros(1000000 / CLOCK as u64));
+        ::std::thread::sleep(Duration::from_micros(1_000_000_000 / CLOCK as u64));
     }
 }

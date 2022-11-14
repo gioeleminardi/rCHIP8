@@ -4,8 +4,11 @@
 
 use rand::Rng;
 use std::fs::File;
-use std::{io, thread};
 use std::io::{BufReader, Read};
+use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
+use std::{io, thread};
 
 mod memory;
 
@@ -44,8 +47,8 @@ pub struct Cpu {
     keys: Vec<u8>,
     pc: u16,
     i: u16,
-    dt: u8,
-    st: u8,
+    dt: Arc<AtomicU8>,
+    st: Arc<AtomicU8>,
     draw: bool,
     key_pressed: Option<u8>,
 }
@@ -75,8 +78,8 @@ impl Cpu {
             keys,
             pc: START_SECTION,
             i: 0,
-            dt: 0,
-            st: 0,
+            dt: Arc::new(AtomicU8::new(0)),
+            st: Arc::new(AtomicU8::new(0)),
             draw: false,
             key_pressed: None,
         }
@@ -101,14 +104,21 @@ impl Cpu {
         let opcode = self.fetch();
         // Decode & Execute
         self.decode_and_execute(opcode);
+    }
 
-        if self.dt > 0 {
-            self.dt -= 1;
-        }
+    pub fn start_timers(&self) {
+        let dt = Arc::clone(&self.dt);
+        let st = Arc::clone(&self.st);
 
-        if self.st > 0 {
-            self.st -= 1;
-        }
+        thread::spawn(move || loop {
+            if dt.load(Ordering::SeqCst) > 0 {
+                dt.fetch_sub(1, Ordering::SeqCst);
+            }
+            if st.load(Ordering::SeqCst) > 0 {
+                st.fetch_sub(1, Ordering::SeqCst);
+            }
+            thread::sleep(Duration::from_micros(1000000 / 60));
+        });
     }
 
     /// Set 1 to `keys[key]` if the key `key` is pressed
@@ -332,7 +342,7 @@ impl Cpu {
                             self.regs[x] -= vy;
                         } else {
                             self.regs[0xF] = 0;
-                            vy = 0xFF - self.regs[y] + 1;
+                            vy = 0xFF - self.regs[y] + 1; //TODO: fix overflow
                             self.regs[x] += vy;
                         }
                     }
@@ -359,7 +369,7 @@ impl Cpu {
                             self.regs[0xF] = 1;
                         }
 
-                        self.regs[x] = self.regs[y] - self.regs[x];
+                        self.regs[x] = self.regs[y] - self.regs[x]; //TODO: fix overflow
                     }
                     0xE => {
                         // 8xyE - SHL Vx {, Vy}
@@ -486,7 +496,7 @@ impl Cpu {
                         //
                         // The value of DT is placed into Vx.
                         println!("LD V{:01X}, DT", x);
-                        self.regs[x] = self.dt;
+                        self.regs[x] = self.dt.load(Ordering::SeqCst);
                     }
                     0x0A => {
                         // Fx0A - LD Vx, K
@@ -495,11 +505,10 @@ impl Cpu {
                         // All execution stops until a key is pressed, then the value of that key
                         // is stored in Vx.
                         println!("LD V{:01X}, K", x);
-                        'wait_key: loop {
-                            if let Some(key) = self.key_pressed {
-                                self.regs[x] = key;
-                                break 'wait_key;
-                            }
+                        if let Some(key) = self.key_pressed {
+                            self.regs[x] = key;
+                        } else {
+                            self.pc -= 2;
                         }
                     }
                     0x15 => {
@@ -508,7 +517,7 @@ impl Cpu {
                         //
                         // DT is set equal to the value of Vx.
                         println!("LD DT, V{:01X}", x);
-                        self.dt = self.regs[x];
+                        self.dt.store(self.regs[x], Ordering::SeqCst);
                     }
                     0x18 => {
                         // Fx18 - LD ST, Vx
@@ -516,7 +525,7 @@ impl Cpu {
                         //
                         // ST is set equal to the value of Vx.
                         println!("LD ST, V{:01X}", x);
-                        self.dt = self.regs[x];
+                        self.st.store(self.regs[x], Ordering::SeqCst);
                     }
                     0x1E => {
                         // Fx1E - ADD I, Vx
@@ -562,8 +571,9 @@ impl Cpu {
                         // starting at the address in I.
                         println!("LD [I], V{:1X}", x);
 
-                        for reg in 0..x {
-                            self.memory.write((self.i + reg as u16) as usize, self.regs[reg]);
+                        for reg in 0..x + 1 {
+                            self.memory
+                                .write((self.i + reg as u16) as usize, self.regs[reg]);
                         }
                     }
                     0x65 => {
@@ -574,7 +584,7 @@ impl Cpu {
                         // registers V0 through Vx.
                         println!("LD V{:1X}, [I]", x);
 
-                        for reg in 0..x {
+                        for reg in 0..x + 1 {
                             self.regs[reg] = self.memory.read((self.i + reg as u16) as usize);
                         }
                     }
@@ -604,8 +614,10 @@ impl Cpu {
     }
 
     pub fn draw(&mut self) -> bool {
-        let draw = self.draw;
-        self.draw = false;
-        draw
+        self.draw
+    }
+
+    pub fn play(&self) -> bool {
+        self.st.load(Ordering::SeqCst) != 0
     }
 }
