@@ -32,12 +32,12 @@ const FONTS: [u8; 5 * 16] = [
     0xF0, 0x80, 0x80, 0x80, 0xF0, // C
     0xE0, 0x90, 0x90, 0x90, 0xE0, // D
     0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
-    0xF0, 0x80, 0xF0, 0x80, 0x80  // F
+    0xF0, 0x80, 0xF0, 0x80, 0x80, // F
 ];
 
 /// This is the structure of the chip-8 interpreter
 #[derive(Debug)]
-pub struct Chip8 {
+pub struct Cpu {
     memory: memory::Memory,
     stack: Vec<u16>,
     vram: Vec<u8>,
@@ -47,13 +47,14 @@ pub struct Chip8 {
     i: u16,
     dt: u8,
     st: u8,
+    draw: bool,
 }
 
-impl Chip8 {
+impl Cpu {
     /// Construct a new instance of Chip8
-    pub fn new() -> Chip8 {
+    pub fn new() -> Cpu {
         let mut memory = memory::Memory::new();
-        memory.load_at_offset(FONT_SECTION as usize, FONTS.to_vec());
+        memory.write_vec(FONT_SECTION as usize, FONTS.to_vec());
 
         let mut regs = Vec::new();
         regs.resize(16, 0);
@@ -66,7 +67,7 @@ impl Chip8 {
 
         let stack = Vec::new();
 
-        Chip8 {
+        Cpu {
             memory,
             stack,
             vram,
@@ -76,6 +77,7 @@ impl Chip8 {
             i: 0,
             dt: 0,
             st: 0,
+            draw: false,
         }
     }
 
@@ -87,7 +89,7 @@ impl Chip8 {
 
         reader.read_to_end(&mut buffer)?;
 
-        self.memory.load_at_offset(START_SECTION as usize, buffer);
+        self.memory.write_vec(START_SECTION as usize, buffer);
 
         Ok(())
     }
@@ -98,6 +100,18 @@ impl Chip8 {
         let opcode = self.fetch();
         // Decode & Execute
         self.decode_and_execute(opcode);
+    }
+
+    /// Set 1 to `keys[key]` if the key `key` is pressed
+    pub fn key_press(&mut self, key: u8) {
+        self.keys[key as usize] = 1;
+        println!("Key Pressed: {}", key);
+    }
+
+    /// Set 0 to `keys[key]` if the key `key` is released
+    pub fn key_release(&mut self, key: u8) {
+        self.keys[key as usize] = 0;
+        println!("Key Released: {}", key);
     }
 
     /// Read the instruction that PC is currently pointing at from memory.
@@ -148,6 +162,9 @@ impl Chip8 {
                         // 00E0 - CLS
                         // Clear the display.
                         println!("CLS");
+                        self.vram.clear();
+                        self.vram.resize(WIDTH * HEIGHT, 0);
+                        self.draw = true;
                     }
                     _ => {
                         // 0nnn - SYS addr
@@ -224,7 +241,9 @@ impl Chip8 {
                 // Set Vx = Vx + kk.
                 //
                 // Adds the value kk to the value of register Vx, then stores the result in Vx.
-                self.regs[x] += kk;
+                let mut vx = self.regs[x] as u16;
+                vx += kk as u16;
+                self.regs[x] = vx as u8;
                 println!("ADD V{:1X}, {:02X}", x, kk);
             }
             0x8 => {
@@ -279,7 +298,7 @@ impl Chip8 {
                         // the result are kept, and stored in Vx.
                         let temp: u16 = self.regs[x] as u16 + self.regs[y] as u16;
 
-                        self.regs[x] += self.regs[y];
+                        self.regs[x] = temp as u8;
 
                         if temp > 0xFF {
                             self.regs[0xF] = 1;
@@ -292,12 +311,21 @@ impl Chip8 {
                         //
                         // If Vx > Vy, then VF is set to 1, otherwise 0. Then Vy is subtracted from Vx,
                         // and the results stored in Vx.
-                        if self.regs[x] > self.regs[y] {
+                        println!("SUB V{:1X}, V{:1X}", x, y);
+                        let mut vy = self.regs[y];
+                        let vx = self.regs[x];
+                        println!("VX - VY = {vx} - {vy}");
+
+                        if self.regs[x] > vy {
                             self.regs[0xF] = 1;
+                            self.regs[x] -= vy;
+                        } else {
+                            self.regs[0xF] = 0;
+                            vy = 0xFF - self.regs[y] + 1;
+                            self.regs[x] += vy;
                         }
 
-                        self.regs[x] -= self.regs[y];
-                        println!("SUB V{:1X}, V{:1X}", x, y);
+                        println!("VX = {}", self.regs[x]);
                     }
                     0x6 => {
                         // 8xy6 - SHR Vx {, Vy}
@@ -402,7 +430,9 @@ impl Chip8 {
                         let bit = (byte & (0x80 >> bit_idx)) >> (7 - bit_idx);
                         if bit == 1 {
                             // Calculate vram idx
-                            let vram_idx = (y_coor as usize + idx) * WIDTH + x_coor as usize + bit_idx;
+                            let mut vram_idx =
+                                (y_coor as usize + idx) * WIDTH + x_coor as usize + bit_idx;
+                            vram_idx %= WIDTH * HEIGHT;
                             if self.vram[vram_idx] == 1 {
                                 self.regs[0xF] = 1;
                             }
@@ -410,17 +440,7 @@ impl Chip8 {
                         }
                     }
                 }
-
-                // for (idx, byte) in self.vram.iter().enumerate() {
-                //     for bit_idx in 0..8 {
-                //         // Get sprite pixel value
-                //         let bit = (byte & (0x80 >> bit_idx)) >> (7 - bit_idx);
-                //         print!("{bit}");
-                //     }
-                //     if idx % 64 == 0 {
-                //         println!();
-                //     }
-                // }
+                self.draw = true;
             }
             0xE => {
                 match kk {
@@ -505,7 +525,7 @@ impl Chip8 {
                         vx -= tens * 10;
                         let ones: u8 = vx;
                         self.memory
-                            .load_at_offset(self.i as usize, vec![hundreds, tens, ones]);
+                            .write_vec(self.i as usize, vec![hundreds, tens, ones]);
                         println!("LD B, V{:1X}", x);
                     }
                     0x55 => {
@@ -514,12 +534,16 @@ impl Chip8 {
                         //
                         // The interpreter copies the values of registers V0 through Vx into memory,
                         // starting at the address in I.
-                        let mut regs: Vec<u8> = Vec::new();
-                        let vx = self.regs[x] as usize;
-                        regs.resize(vx, 0);
-                        regs.copy_from_slice(&self.regs[..vx]);
-                        self.memory.load_at_offset(self.i as usize, regs);
                         println!("LD [I], V{:1X}", x);
+
+
+                        println!("REGS: {:?}", self.regs);
+
+                        for reg in 0..x {
+                            self.memory.write((self.i + reg as u16) as usize, self.regs[reg]);
+                        }
+
+                        println!("REGS STORED: {:?}", self.memory.read_chunk(self.i as usize, x + 1));
                     }
                     0x65 => {
                         // Fx65 - LD Vx, [I]
@@ -527,13 +551,15 @@ impl Chip8 {
                         //
                         // The interpreter reads values from memory starting at location I into
                         // registers V0 through Vx.
-                        let mut regs: Vec<u8> = Vec::new();
-                        let vx = self.regs[x] as usize;
-                        regs.resize(vx, 0);
-                        let data = self.memory.read_chunk(self.i as usize, vx);
-                        regs.copy_from_slice(data);
-                        self.regs = regs;
                         println!("LD V{:1X}, [I]", x);
+
+                        println!("OLD REGS: {:?}", self.regs);
+
+                        for reg in 0..x {
+                            self.regs[reg] = self.memory.read((self.i + reg as u16) as usize);
+                        }
+
+                        println!("LOADED REGS: {:?}", self.regs);
                     }
                     _ => panic!("Error on OPCODE!"),
                 }
@@ -556,15 +582,13 @@ impl Chip8 {
         (nnn, n, x, y, kk)
     }
 
-    /// Set 1 to `keys[key]` if the key `key` is pressed
-    pub fn key_press(&mut self, key: u8) {
-        self.keys[key as usize] = 1;
-        println!("Key Pressed: {}", key);
+    pub fn vram(&self, x: usize, y: usize) -> u8 {
+        self.vram[y * WIDTH + x]
     }
 
-    /// Set 0 to `keys[key]` if the key `key` is released
-    pub fn key_release(&mut self, key: u8) {
-        self.keys[key as usize] = 0;
-        println!("Key Released: {}", key);
+    pub fn draw(&mut self) -> bool {
+        let draw = self.draw;
+        self.draw = false;
+        draw
     }
 }

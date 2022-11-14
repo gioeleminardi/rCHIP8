@@ -10,9 +10,13 @@ impl Memory {
         Memory { data }
     }
 
-    pub fn load_at_offset(&mut self, offset: usize, data: Vec<u8>) {
+    pub fn write_vec(&mut self, offset: usize, data: Vec<u8>) {
         let end = data.len();
         self.data[offset..offset + end].copy_from_slice(&data);
+    }
+
+    pub fn write(&mut self, offset: usize, data: u8) {
+        self.data[offset] = data;
     }
 
     pub fn read(&self, offset: usize) -> u8 {
