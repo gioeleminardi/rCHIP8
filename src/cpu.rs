@@ -7,7 +7,6 @@ use std::fs::File;
 use std::io;
 use std::io::{BufReader, Read};
 
-mod display;
 mod memory;
 
 const START_SECTION: u16 = 0x200;
@@ -48,6 +47,7 @@ pub struct Cpu {
     dt: u8,
     st: u8,
     draw: bool,
+    key_pressed: Option<u8>,
 }
 
 impl Cpu {
@@ -78,6 +78,7 @@ impl Cpu {
             dt: 0,
             st: 0,
             draw: false,
+            key_pressed: None,
         }
     }
 
@@ -104,14 +105,16 @@ impl Cpu {
 
     /// Set 1 to `keys[key]` if the key `key` is pressed
     pub fn key_press(&mut self, key: u8) {
-        self.keys[key as usize] = 1;
         println!("Key Pressed: {}", key);
+        self.keys[key as usize] = 1;
+        self.key_pressed = Some(key);
     }
 
     /// Set 0 to `keys[key]` if the key `key` is released
     pub fn key_release(&mut self, key: u8) {
         self.keys[key as usize] = 0;
         println!("Key Released: {}", key);
+        self.key_pressed = None;
     }
 
     /// Read the instruction that PC is currently pointing at from memory.
@@ -155,8 +158,8 @@ impl Cpu {
                         // The interpreter sets the program counter to the address
                         // at the top of the stack, then subtracts 1 from the stack pointer.
                         let addr = self.stack.pop().unwrap();
+                        println!("RET to {:04X}", addr);
                         self.pc = addr;
-                        println!("RET");
                     }
                     0x0E0 => {
                         // 00E0 - CLS
@@ -181,8 +184,8 @@ impl Cpu {
                 // Jump to location nnn.
                 //
                 // The interpreter sets the program counter to nnn.
-                self.pc = nnn;
                 println!("JP {:03X}", nnn);
+                self.pc = nnn;
             }
             0x2 => {
                 // 2nnn - CALL addr
@@ -191,9 +194,9 @@ impl Cpu {
                 // The interpreter increments the stack pointer,
                 // then puts the current PC on the top of the stack.
                 // The PC is then set to nnn.
+                println!("CALL {:03X}", nnn);
                 self.stack.push(self.pc);
                 self.pc = nnn;
-                println!("CALL {:03X}", nnn);
             }
             0x3 => {
                 // 3xkk - SE Vx, byte
@@ -201,10 +204,10 @@ impl Cpu {
                 //
                 // The interpreter compares register Vx to kk, and if they are equal,
                 // increments the program counter by 2.
+                println!("SE V{:1X}, {:02X}", x, kk);
                 if self.regs[x] == kk {
                     self.pc += 2;
                 }
-                println!("SE V{:1X}, {:02X}", x, kk);
             }
             0x4 => {
                 // 4xkk - SNE Vx, byte
@@ -212,10 +215,10 @@ impl Cpu {
                 //
                 // The interpreter compares register Vx to kk, and if they are not equal,
                 // increments the program counter by 2.
+                println!("SNE V{:1X}, {:02X}", x, kk);
                 if self.regs[x] != kk {
                     self.pc += 2;
                 }
-                println!("SNE V{:1X}, {:02X}", x, kk);
             }
             0x5 => {
                 // 5xy0 - SE Vx, Vy
@@ -223,28 +226,28 @@ impl Cpu {
                 //
                 // The interpreter compares register Vx to register Vy, and if they are equal,
                 // increments the program counter by 2.
+                println!("SE V{:1X}, V{:1X}", x, y);
                 if self.regs[x] == self.regs[y] {
                     self.pc += 2;
                 }
-                println!("SE V{:1X}, V{:1X}", x, y);
             }
             0x6 => {
                 // 6xkk - LD Vx, byte
                 // Set Vx = kk.
                 //
                 // The interpreter puts the value kk into register Vx.
-                self.regs[x] = kk;
                 println!("LD V{:1X}, {:02X}", x, kk);
+                self.regs[x] = kk;
             }
             0x7 => {
                 // 7xkk - ADD Vx, byte
                 // Set Vx = Vx + kk.
                 //
                 // Adds the value kk to the value of register Vx, then stores the result in Vx.
+                println!("ADD V{:1X}, {:02X}", x, kk);
                 let mut vx = self.regs[x] as u16;
                 vx += kk as u16;
                 self.regs[x] = vx as u8;
-                println!("ADD V{:1X}, {:02X}", x, kk);
             }
             0x8 => {
                 match n {
@@ -253,8 +256,8 @@ impl Cpu {
                         // Set Vx = Vy.
                         //
                         // Stores the value of register Vy in register Vx.
-                        self.regs[x] = self.regs[y];
                         println!("LD V{:1X}, V{:1X}", x, y);
+                        self.regs[x] = self.regs[y];
                     }
                     0x1 => {
                         // 8xy1 - OR Vx, Vy
@@ -264,8 +267,8 @@ impl Cpu {
                         // A bitwise OR compares the corresponding bits from two values,
                         // and if either bit is 1, then the same bit in the result is also 1.
                         // Otherwise, it is 0.
-                        self.regs[x] |= self.regs[y];
                         println!("OR V{:1X}, V{:1X}", x, y);
+                        self.regs[x] |= self.regs[y];
                     }
                     0x2 => {
                         // 8xy2 - AND Vx, Vy
@@ -275,8 +278,8 @@ impl Cpu {
                         // A bitwise AND compares the corresponding bits from two values,
                         // and if both bits are 1, then the same bit in the result is also 1.
                         // Otherwise, it is 0.
-                        self.regs[x] &= self.regs[y];
                         println!("AND V{:1X}, V{:1X}", x, y);
+                        self.regs[x] &= self.regs[y];
                     }
                     0x3 => {
                         // 8xy3 - XOR Vx, Vy
@@ -286,8 +289,8 @@ impl Cpu {
                         // then stores the result in Vx. An exclusive OR compares the corresponding bits
                         // from two values, and if the bits are not both the same, then the corresponding
                         // bit in the result is set to 1. Otherwise, it is 0.
-                        self.regs[x] ^= self.regs[y];
                         println!("XOR V{:1X}, V{:1X}", x, y);
+                        self.regs[x] ^= self.regs[y];
                     }
                     0x4 => {
                         // 8xy4 - ADD Vx, Vy
@@ -296,6 +299,8 @@ impl Cpu {
                         // The values of Vx and Vy are added together. If the result is greater than
                         // 8 bits (i.e., > 255,) VF is set to 1, otherwise 0. Only the lowest 8 bits of
                         // the result are kept, and stored in Vx.
+                        println!("ADD V{:1X}, V{:1X}", x, y);
+
                         let temp: u16 = self.regs[x] as u16 + self.regs[y] as u16;
 
                         self.regs[x] = temp as u8;
@@ -303,7 +308,6 @@ impl Cpu {
                         if temp > 0xFF {
                             self.regs[0xF] = 1;
                         }
-                        println!("ADD V{:1X}, V{:1X}", x, y);
                     }
                     0x5 => {
                         // 8xy5 - SUB Vx, Vy
@@ -312,9 +316,8 @@ impl Cpu {
                         // If Vx > Vy, then VF is set to 1, otherwise 0. Then Vy is subtracted from Vx,
                         // and the results stored in Vx.
                         println!("SUB V{:1X}, V{:1X}", x, y);
+
                         let mut vy = self.regs[y];
-                        let vx = self.regs[x];
-                        println!("VX - VY = {vx} - {vy}");
 
                         if self.regs[x] > vy {
                             self.regs[0xF] = 1;
@@ -324,8 +327,6 @@ impl Cpu {
                             vy = 0xFF - self.regs[y] + 1;
                             self.regs[x] += vy;
                         }
-
-                        println!("VX = {}", self.regs[x]);
                     }
                     0x6 => {
                         // 8xy6 - SHR Vx {, Vy}
@@ -333,10 +334,10 @@ impl Cpu {
                         //
                         // If the least-significant bit of Vx is 1, then VF is set to 1, otherwise 0.
                         // Then Vx is divided by 2.
+                        println!("SHR V{:1X}", x);
 
                         self.regs[0xF] = self.regs[x] & 0b1;
                         self.regs[x] >>= 1;
-                        println!("SHR V{:1X}", x);
                     }
                     0x7 => {
                         // 8xy7 - SUBN Vx, Vy
@@ -344,13 +345,13 @@ impl Cpu {
                         //
                         // If Vy > Vx, then VF is set to 1, otherwise 0. Then Vx is subtracted from Vy,
                         // and the results stored in Vx.
+                        println!("SUBN V{:1X}, V{:1X}", x, y);
 
                         if self.regs[y] > self.regs[x] {
                             self.regs[0xF] = 1;
                         }
 
                         self.regs[x] = self.regs[y] - self.regs[x];
-                        println!("SUBN V{:1X}, V{:1X}", x, y);
                     }
                     0xE => {
                         // 8xyE - SHL Vx {, Vy}
@@ -358,9 +359,9 @@ impl Cpu {
                         //
                         // If the most-significant bit of Vx is 1, then VF is set to 1, otherwise to 0.
                         // Then Vx is multiplied by 2.
+                        println!("SHL V{:1X}", x);
                         self.regs[0xF] = (self.regs[x] >> 7) & 0b1;
                         self.regs[x] <<= 1;
-                        println!("SHL V{:1X}", x);
                     }
                     _ => panic!("Not valid!"),
                 }
@@ -371,26 +372,26 @@ impl Cpu {
                 //
                 // The values of Vx and Vy are compared, and if they are not equal,
                 // the program counter is increased by 2.
+                println!("SNE V{:1X}, V{:1X}", x, y);
                 if self.regs[x] != self.regs[y] {
                     self.pc += 2;
                 }
-                println!("SNE V{:1X}, V{:1X}", x, y);
             }
             0xA => {
                 // Annn - LD I, addr
                 // Set I = nnn.
                 //
                 // The value of register I is set to nnn.
-                self.i = nnn;
                 println!("LD I, {:3X}", nnn);
+                self.i = nnn;
             }
             0xB => {
                 // Bnnn - JP V0, addr
                 // Jump to location nnn + V0.
                 //
                 // The program counter is set to nnn plus the value of V0.
-                self.pc = nnn + self.regs[0] as u16;
                 println!("JP V0, {:3X}", nnn);
+                self.pc = nnn + self.regs[0] as u16;
             }
             0xC => {
                 // Cxkk - RND Vx, byte
@@ -399,10 +400,10 @@ impl Cpu {
                 // The interpreter generates a random number from 0 to 255,
                 // which is then ANDed with the value kk. The results are stored in Vx.
                 // See instruction 8xy2 for more information on AND.
+                println!("RND V{:1X}, {:3X}", x, nnn);
                 let mut rng = rand::thread_rng();
                 let rnd_num = rng.gen_range(0..255);
                 self.regs[x] = rnd_num & kk;
-                println!("RND V{:1X}, {:3X}", x, nnn);
             }
             0xD => {
                 // Dxyn - DRW Vx, Vy, nibble
@@ -450,7 +451,10 @@ impl Cpu {
                         //
                         // Checks the keyboard, and if the key corresponding to the value of Vx is
                         // currently in the down position, PC is increased by 2.
-                        println!("SKP V{:1X} - TODO", x);
+                        println!("SKP V{:1X}", x);
+                        if self.keys[self.regs[x] as usize] == 1 {
+                            self.pc += 2;
+                        }
                     }
                     0xA1 => {
                         // ExA1 - SKNP Vx
@@ -458,7 +462,10 @@ impl Cpu {
                         //
                         // Checks the keyboard, and if the key corresponding to the value of Vx is
                         // currently in the up position, PC is increased by 2.
-                        println!("SKNP V{:1X} - TODO", x);
+                        println!("SKNP V{:1X}", x);
+                        if self.keys[self.regs[x] as usize] == 0 {
+                            self.pc += 2;
+                        }
                     }
                     _ => panic!("Error on OPCODE!"),
                 }
@@ -470,7 +477,8 @@ impl Cpu {
                         // Set Vx = delay timer value.
                         //
                         // The value of DT is placed into Vx.
-                        println!("LD V{:01X}, DT - TODO", x);
+                        println!("LD V{:01X}, DT", x);
+                        self.regs[x] = self.dt;
                     }
                     0x0A => {
                         // Fx0A - LD Vx, K
@@ -478,29 +486,37 @@ impl Cpu {
                         //
                         // All execution stops until a key is pressed, then the value of that key
                         // is stored in Vx.
-                        println!("LD V{:01X}, K - TODO", x);
+                        println!("LD V{:01X}, K", x);
+                        'wait_key: loop {
+                            if let Some(key) = self.key_pressed {
+                                self.regs[x] = key;
+                                break 'wait_key;
+                            }
+                        }
                     }
                     0x15 => {
                         // Fx15 - LD DT, Vx
                         // Set delay timer = Vx.
                         //
                         // DT is set equal to the value of Vx.
-                        println!("LD DT, V{:01X} - TODO", x);
+                        println!("LD DT, V{:01X}", x);
+                        self.dt = self.regs[x];
                     }
                     0x18 => {
                         // Fx18 - LD ST, Vx
                         // Set sound timer = Vx.
                         //
                         // ST is set equal to the value of Vx.
-                        println!("LD ST, V{:01X} - TODO", x);
+                        println!("LD ST, V{:01X}", x);
+                        self.dt = self.regs[x];
                     }
                     0x1E => {
                         // Fx1E - ADD I, Vx
                         // Set I = I + Vx.
                         //
                         // The values of I and Vx are added, and the results are stored in I.
-                        self.i += self.regs[x] as u16;
                         println!("ADD I, V{:1X}", x);
+                        self.i += self.regs[x] as u16;
                     }
                     0x29 => {
                         // Fx29 - LD F, Vx
@@ -509,7 +525,8 @@ impl Cpu {
                         // The value of I is set to the location for the hexadecimal sprite corresponding
                         // to the value of Vx. See section 2.4, Display, for more information on the Chip-8
                         // hexadecimal font.
-                        println!("LD F, V{:01X} - TODO", x);
+                        println!("LD F, V{:01X}", x);
+                        self.i = FONT_SECTION + self.regs[x] as u16 * 5;
                     }
                     0x33 => {
                         // Fx33 - LD B, Vx
@@ -518,6 +535,8 @@ impl Cpu {
                         // The interpreter takes the decimal value of Vx, and places the hundreds digit
                         // in memory at location in I, the tens digit at location I+1, and the ones digit
                         // at location I+2.
+                        println!("LD B, V{:1X}", x);
+
                         let mut vx = self.regs[x];
                         let hundreds: u8 = vx / 100;
                         vx -= hundreds * 100;
@@ -526,7 +545,6 @@ impl Cpu {
                         let ones: u8 = vx;
                         self.memory
                             .write_vec(self.i as usize, vec![hundreds, tens, ones]);
-                        println!("LD B, V{:1X}", x);
                     }
                     0x55 => {
                         // Fx55 - LD [I], Vx
@@ -536,14 +554,9 @@ impl Cpu {
                         // starting at the address in I.
                         println!("LD [I], V{:1X}", x);
 
-
-                        println!("REGS: {:?}", self.regs);
-
                         for reg in 0..x {
                             self.memory.write((self.i + reg as u16) as usize, self.regs[reg]);
                         }
-
-                        println!("REGS STORED: {:?}", self.memory.read_chunk(self.i as usize, x + 1));
                     }
                     0x65 => {
                         // Fx65 - LD Vx, [I]
@@ -553,13 +566,9 @@ impl Cpu {
                         // registers V0 through Vx.
                         println!("LD V{:1X}, [I]", x);
 
-                        println!("OLD REGS: {:?}", self.regs);
-
                         for reg in 0..x {
                             self.regs[reg] = self.memory.read((self.i + reg as u16) as usize);
                         }
-
-                        println!("LOADED REGS: {:?}", self.regs);
                     }
                     _ => panic!("Error on OPCODE!"),
                 }

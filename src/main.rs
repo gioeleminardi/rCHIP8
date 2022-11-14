@@ -17,7 +17,7 @@ fn main() {
 
     // cpu.load_rom("rom/IBMLogo.ch8").expect("Error reading rom");
     // cpu.load_rom("rom/test_opcode.ch8").expect("Error reading rom");
-    cpu.load_rom("rom/c8games/BLINKY").expect("Error reading rom");
+    cpu.load_rom("rom/c8games/INVADERS").expect("Error reading rom");
 
     // println!("{:#02X?}", cpu);
 
@@ -93,20 +93,20 @@ fn main() {
 
         canvas.set_draw_color(Color::GREEN);
 
-        if cpu.draw() {
-            for row in 0..32 {
-                for col in 0..64 {
-                    if cpu.vram(col as usize, row as usize) != 0 {
-                        let rect = Rect::new((col * SCALE_X) as i32, (row * SCALE_Y) as i32, SCALE_X, SCALE_Y);
-                        canvas.fill_rect(rect).unwrap();
-                    }
+        // if cpu.draw() {
+        for row in 0..32 {
+            for col in 0..64 {
+                if cpu.vram(col as usize, row as usize) != 0 {
+                    let rect = Rect::new((col * SCALE_X) as i32, (row * SCALE_Y) as i32, SCALE_X, SCALE_Y);
+                    canvas.fill_rect(rect).unwrap();
                 }
             }
         }
+        // }
 
         // break 'running;
 
         canvas.present();
-        ::std::thread::sleep(Duration::from_micros(1 as u64));
+        ::std::thread::sleep(Duration::from_micros(1000000 / CLOCK as u64));
     }
 }
