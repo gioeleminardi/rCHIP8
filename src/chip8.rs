@@ -97,7 +97,7 @@ impl Chip8 {
         // Fetch
         let opcode = self.fetch();
         // Decode & Execute
-        self.decode(opcode);
+        self.decode_and_execute(opcode);
     }
 
     /// Read the instruction that PC is currently pointing at from memory.
@@ -123,7 +123,7 @@ impl Chip8 {
     /// it is, the rest of the nibbles will have different meanings.
     /// To differentiate these meanings, we usually call them different things,
     /// but all of them can be any hexadecimal number from 0 to F
-    fn decode(&mut self, opcode: u16) {
+    fn decode_and_execute(&mut self, opcode: u16) {
         let instruction_type = (opcode >> 12) as u8;
         let instruction_data = opcode & 0b111111111111;
 
@@ -387,7 +387,40 @@ impl Chip8 {
                 // so part of it is outside the coordinates of the display, it wraps around to the
                 // opposite side of the screen. See instruction 8xy3 for more information on XOR,
                 // and section 2.4, Display, for more information on the Chip-8 screen and sprites.
-                println!("DRW V{:1X}, V{:1X}, {:01X} - TODO", x, y, n);
+                println!("DRW V{:1X}, V{:1X}, {:01X}", x, y, n);
+
+                let x_coor = self.regs[x] % 64; // col
+                let y_coor = self.regs[y] % 32; // row
+
+                self.regs[0xF] = 0;
+
+                let data = self.memory.read_chunk(self.i as usize, n as usize);
+
+                for (idx, byte) in data.iter().enumerate() {
+                    for bit_idx in 0..8 {
+                        // Get sprite pixel value
+                        let bit = (byte & (0x80 >> bit_idx)) >> (7 - bit_idx);
+                        if bit == 1 {
+                            // Calculate vram idx
+                            let vram_idx = (y_coor as usize + idx) * WIDTH + x_coor as usize + bit_idx;
+                            if self.vram[vram_idx] == 1 {
+                                self.regs[0xF] = 1;
+                            }
+                            self.vram[vram_idx] ^= bit;
+                        }
+                    }
+                }
+
+                // for (idx, byte) in self.vram.iter().enumerate() {
+                //     for bit_idx in 0..8 {
+                //         // Get sprite pixel value
+                //         let bit = (byte & (0x80 >> bit_idx)) >> (7 - bit_idx);
+                //         print!("{bit}");
+                //     }
+                //     if idx % 64 == 0 {
+                //         println!();
+                //     }
+                // }
             }
             0xE => {
                 match kk {
@@ -523,11 +556,13 @@ impl Chip8 {
         (nnn, n, x, y, kk)
     }
 
+    /// Set 1 to `keys[key]` if the key `key` is pressed
     pub fn key_press(&mut self, key: u8) {
         self.keys[key as usize] = 1;
         println!("Key Pressed: {}", key);
     }
 
+    /// Set 0 to `keys[key]` if the key `key` is released
     pub fn key_release(&mut self, key: u8) {
         self.keys[key as usize] = 0;
         println!("Key Released: {}", key);

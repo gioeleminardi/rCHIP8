@@ -5,6 +5,8 @@ use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 use std::time::Duration;
 
+const WIDTH: u32 = 640;
+const HEIGHT: u32 = 320;
 const CLOCK: u32 = 60; // Hz
 
 fn main() {
@@ -19,20 +21,15 @@ fn main() {
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
     let window = video_subsystem
-        .window("rCHIP-8", 800, 600)
+        .window("rCHIP-8", WIDTH, HEIGHT)
         .position_centered()
         .build()
         .unwrap();
 
     let mut canvas = window.into_canvas().build().unwrap();
-    canvas.set_draw_color(Color::RGB(0, 255, 255));
-    canvas.clear();
-    canvas.present();
     let mut event_pump = sdl_context.event_pump().unwrap();
-    let mut i = 0;
     'running: loop {
-        i = (i + 1) % 255;
-        canvas.set_draw_color(Color::RGB(i, 64, 255 - i));
+        canvas.set_draw_color(Color::RGB(0, 0, 0));
         canvas.clear();
         for event in event_pump.poll_iter() {
             match event {
@@ -93,9 +90,11 @@ fn main() {
             }
         }
 
-        // chip8.run();
+        chip8.run();
+
+
 
         canvas.present();
-        ::std::thread::sleep(Duration::from_micros((1_000_000 / CLOCK) as u64));
+        ::std::thread::sleep(Duration::from_millis((1_000 / CLOCK) as u64));
     }
 }
