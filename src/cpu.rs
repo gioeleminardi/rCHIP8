@@ -335,15 +335,18 @@ impl Cpu {
                         // and the results stored in Vx.
                         println!("SUB V{:1X}, V{:1X}", x, y);
 
-                        let mut vy = self.regs[y];
-
-                        if self.regs[x] > vy {
-                            self.regs[0xF] = 1;
-                            self.regs[x] -= vy;
+                        if self.regs[x] >= self.regs[y] {
+                            if self.regs[x] > self.regs[y] {
+                                self.regs[0xF] = 1;
+                            } else {
+                                self.regs[0xF] = 0;
+                            }
+                            self.regs[x] -= self.regs[y];
                         } else {
                             self.regs[0xF] = 0;
-                            vy = 0xFF - self.regs[y] + 1; //TODO: fix overflow
-                            self.regs[x] += vy;
+                            let temp_y = 0xFF - self.regs[y];
+                            println!("SUB {}, {}, {}", self.regs[x], self.regs[y], temp_y);
+                            self.regs[x] += temp_y + 1;
                         }
                     }
                     0x6 => {
@@ -365,11 +368,19 @@ impl Cpu {
                         // and the results stored in Vx.
                         println!("SUBN V{:1X}, V{:1X}", x, y);
 
-                        if self.regs[y] > self.regs[x] {
-                            self.regs[0xF] = 1;
+                        if self.regs[y] >= self.regs[x] {
+                            if self.regs[y] > self.regs[x] {
+                                self.regs[0xF] = 1;
+                            } else {
+                                self.regs[0xF] = 0;
+                            }
+                            self.regs[x] = self.regs[y] - self.regs[x];
+                        } else {
+                            self.regs[0xF] = 0;
+                            let temp_x = 0xFF - self.regs[x];
+                            println!("SUB {}, {}, {}", self.regs[x], self.regs[y], temp_x);
+                            self.regs[x] = self.regs[y] + temp_x + 1;
                         }
-
-                        self.regs[x] = self.regs[y] - self.regs[x]; //TODO: fix overflow
                     }
                     0xE => {
                         // 8xyE - SHL Vx {, Vy}
@@ -422,6 +433,7 @@ impl Cpu {
                 let mut rng = rand::thread_rng();
                 let rnd_num = rng.gen_range(0..255);
                 self.regs[x] = rnd_num & kk;
+                println!("RND {}", self.regs[x]);
             }
             0xD => {
                 // Dxyn - DRW Vx, Vy, nibble

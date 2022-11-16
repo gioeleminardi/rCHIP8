@@ -17,7 +17,10 @@ const CLOCK: u32 = 1_000_000; // Hz
 fn main() {
     let mut cpu = cpu::Cpu::new();
 
-    cpu.load_rom("rom/test_opcode.ch8")
+
+    // cpu.load_rom("rom/test_opcode.ch8")
+    //     .expect("Error reading rom");
+    cpu.load_rom("rom/c8games/SYZYGY")
         .expect("Error reading rom");
 
     let sdl_context = sdl2::init().unwrap();
